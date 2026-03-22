@@ -1,103 +1,155 @@
 import tkinter as tk
+from tkinter import filedialog, messagebox
 import socket
 import json
+from PIL import Image, ImageTk
+import hashlib
 
 HOST = '127.0.0.1'
 PORT = 4000
 
+def get_password_hash(password):
+    hash_object = hashlib.sha256(password.encode('utf-8'))
+    return hash_object.hexdigest()
+
+
+def get_auth_data():
+    auth_win = tk.Tk()
+    auth_win.title("Авторизация")
+    auth_win.geometry("300x350")
+    user_res = {"data": None}
+    photo_path = tk.StringVar()
+
+    tk.Label(auth_win, text="Логин:").pack(pady=5)
+    login_e = tk.Entry(auth_win);
+    login_e.pack()
+    tk.Label(auth_win, text="Пароль:").pack(pady=5)
+    pass_e = tk.Entry(auth_win, show="*");
+    pass_e.pack()
+
+    def select_p():
+        photo_path.set(filedialog.askopenfilename())
+
+    tk.Button(auth_win, text="Выбрать аватар", command=select_p).pack(pady=10)
+
+    def login():
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((HOST, PORT))
+            hashed = get_password_hash(pass_e.get())
+            s.send(json.dumps(
+                {"type": "AUTH", "login": login_e.get(), "password": hashed, "photo": photo_path.get()}).encode(
+                'utf-8'))
+            res = json.loads(s.recv(4096).decode('utf-8'))
+            if res["status"] == "success":
+                user_res["data"] = res["user"]
+                auth_win.destroy()
+            else:
+                messagebox.showerror("Ошибка", res["message"])
+        except:
+            messagebox.showerror("Ошибка", "Нет связи")
+
+    tk.Button(auth_win, text="Войти / Регистрация", command=login, bg='green', fg='white').pack(pady=20)
+    auth_win.mainloop()
+    return user_res["data"]
+
+
 class TicTacToeClient:
-    def __init__(self, root):
+    def __init__(self, root, user):
         self.root = root
+        self.user = user
         self.root.title("Крестики-Нолики")
         self.root.configure(bg='#1a1a1a')
 
-        self.top_panel = tk.Frame(root, bg='#222', pady=5)
-        self.top_panel.pack(fill=tk.X)
+        self.side = tk.Frame(root, bg='#222', width=150)
+        self.side.pack(side=tk.LEFT, fill=tk.Y, padx=5)
 
-        tk.Label(self.top_panel, text="Сессия :", fg='white', bg='#222').pack(side=tk.LEFT, padx=5)
-        self.room_entry = tk.Entry(self.top_panel, width=5)
-        self.room_entry.insert(0, "1")
-        self.room_entry.pack(side=tk.LEFT)
+        try:
+            img = Image.open(user['photo']).resize((100, 100))
+            self.img_tk = ImageTk.PhotoImage(img)
+            tk.Label(self.side, image=self.img_tk, bg='#222').pack(pady=10)
+        except:
+            tk.Label(self.side, text="Нет фото", fg='white', bg='#444', width=12, height=5).pack(pady=10)
 
-        tk.Label(self.top_panel, text="Моя роль:", fg='white', bg='#222').pack(side=tk.LEFT, padx=5)
+        tk.Label(self.side, text=user['name'], fg='white', font=('Arial', 12, 'bold'), bg='#222').pack()
+
+        self.main = tk.Frame(root, bg='#1a1a1a')
+        self.main.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
+
+        self.top = tk.Frame(self.main, bg='#333', pady=5)
+        self.top.pack(fill=tk.X)
+        tk.Label(self.top, text="Сессия:", fg='white', bg='#333').pack(side=tk.LEFT, padx=5)
+        self.room_e = tk.Entry(self.top, width=5);
+        self.room_e.insert(0, "1");
+        self.room_e.pack(side=tk.LEFT)
+
         self.my_role = tk.StringVar(value="X")
-        tk.Radiobutton(self.top_panel, text="X", variable=self.my_role, value="X",
-               bg='#222', fg='white', selectcolor='#444').pack(side=tk.LEFT, padx=5)
-        tk.Radiobutton(self.top_panel, text="O", variable=self.my_role, value="O",
-               bg='#222', fg='white', selectcolor='#444').pack(side=tk.LEFT, padx=5)
+        tk.Radiobutton(self.top, text="X", variable=self.my_role, value="X", bg='#333', fg='white',
+                       selectcolor='#1a1a1a').pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(self.top, text="O", variable=self.my_role, value="O", bg='#333', fg='white',
+                       selectcolor='#1a1a1a').pack(side=tk.LEFT)
 
-        self.state = {"board": [None]*9, "currentPlayer": 'X', "winner": None, "isDraw": False}
+        self.label_p = tk.Label(self.main, text="", font=('Arial', 14), bg='#1a1a1a')
+        self.label_p.pack(pady=10)
 
-        self.label_player = tk.Label(root, text="", font=('Arial', 14, 'bold'), bg='#1a1a1a')
-        self.label_player.pack(pady=10)
-
-        self.canvas = tk.Frame(root, bg='#333')
-        self.canvas.pack(pady=10)
-        self.buttons = []
+        self.grid = tk.Frame(self.main, bg='#333')
+        self.grid.pack()
+        self.btns = []
         for i in range(9):
-            btn = tk.Button(self.canvas, text="", width=5, height=2, font=('Arial', 20, 'bold'), command=lambda i=i: self.make_move(i))
-            btn.grid(row=i//3, column=i%3, padx=2, pady=2)
-            self.buttons.append(btn)
+            b = tk.Button(self.grid, text="", width=5, height=2, font=('Arial', 20), command=lambda i=i: self.move(i))
+            b.grid(row=i // 3, column=i % 3, padx=2, pady=2)
+            self.btns.append(b)
 
-        self.status_label = tk.Label(root, text="", fg='white', bg='#1a1a1a', font=('Arial', 12))
-        self.status_label.pack()
+        self.status = tk.Label(self.main, text="", bg='#1a1a1a', fg='white')
+        self.status.pack(pady=5)
+        tk.Button(self.main, text="Сброс", command=self.reset).pack()
 
-        tk.Button(root, text="Перезапустить игру", command=self.reset_game).pack(pady=10)
-
+        self.state = {"board": [None] * 9, "currentPlayer": 'X', "winner": None, "isDraw": False}
         self.auto_update()
 
-    def send_request(self, request):
+    def send(self, req):
         try:
-            request['room_id'] = self.room_entry.get()
-            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.settimeout(0.5)
-            client.connect((HOST, PORT))
-            client.send(json.dumps(request).encode('utf-8'))
-            data = client.recv(1024).decode('utf-8')
-            client.close()
-            if data:
-                self.state = json.loads(data)
+            req['room_id'] = self.room_e.get()
+            req['login'] = self.user['name']
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((HOST, PORT))
+            s.send(json.dumps(req).encode('utf-8'))
+            data = s.recv(4096).decode('utf-8')
+            parsed = json.loads(data)
+            if "error" not in parsed:
+                self.state = parsed
                 self.update_ui()
+            s.close()
         except:
             pass
 
-    def make_move(self, index):
-        role = self.my_role.get()
-        if self.state['currentPlayer'] == role:
-            self.send_request({"type": "MOVE", "index": index, "player": role})
+    def move(self, i):
+        if self.state['currentPlayer'] == self.my_role.get():
+            self.send({"type": "MOVE", "index": i, "player": self.my_role.get()})
+
+    def reset(self):
+        self.send({"type": "RESET"})
 
     def auto_update(self):
-        self.send_request({"type": "GET_STATE"})
+        self.send({"type": "GET_STATE"})
         self.root.after(1000, self.auto_update)
 
-    def reset_game(self):
-        self.send_request({"type": "RESET"})
-
     def update_ui(self):
-        board = self.state['board']
-        winner = self.state['winner']
+        for i in range(9): self.btns[i].config(text=self.state['board'][i] or "")
         me = self.my_role.get()
-
-        for i in range(9):
-            self.buttons[i].config(text=board[i] if board[i] else "")
-
-        color = '#818cf8' if me == 'X' else '#10b981'
-        self.label_player.config(text=f"Игрок: {me}", fg=color)
-
-        if winner:
-            if winner == me:
-                self.status_label.config(text="Ты победил", fg='#10b981')
-            else:
-                self.status_label.config(text="Ты проиграл", fg='#ef4444')
+        self.label_p.config(text=f"Вы: {me}", fg='#818cf8' if me == 'X' else '#10b981')
+        win = self.state['winner']
+        if win:
+            self.status.config(text="ПОБЕДА!" if win == me else "ПРОИГРЫШ", fg='green' if win == me else 'red')
         elif self.state['isDraw']:
-            self.status_label.config(text="Ничья", fg='gray')
+            self.status.config(text="НИЧЬЯ", fg='gray')
         else:
-            if self.state['currentPlayer'] == me:
-                self.status_label.config(text="Твой ход", fg='white')
-            else:
-                self.status_label.config(text="Жди хода...", fg='gray')
+            self.status.config(text="Ваш ход" if self.state['currentPlayer'] == me else "Ожидание...")
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = TicTacToeClient(root)
-    root.mainloop()
+    u = get_auth_data()
+    if u:
+        r = tk.Tk()
+        TicTacToeClient(r, u)
+        r.mainloop()
