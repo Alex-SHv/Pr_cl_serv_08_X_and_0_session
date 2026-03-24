@@ -399,3 +399,10 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# .idea gitignore
+.idea/
+
+# Server and Client config.py
+Server/config.py
+Client/config.py

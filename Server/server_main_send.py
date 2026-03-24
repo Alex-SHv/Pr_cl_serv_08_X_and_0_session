@@ -6,6 +6,8 @@ import threading
 HOST = '127.0.0.1'
 PORT = 4000
 DB_FILE = "users.json"
+MAX_CONNECTIONS = 5
+BUFFER_SIZE = 4096
 
 
 class GameSession:
@@ -67,7 +69,7 @@ sessions_lock = threading.Lock()
 def handle_client(conn, addr):
     # Обрабатывает подключение от клиента
     try:
-        data = conn.recv(4096).decode('utf-8')
+        data = conn.recv(BUFFER_SIZE).decode('utf-8')
         if not data:
             return
 
@@ -144,7 +146,7 @@ if __name__ == "__main__":
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
-    server_socket.listen(5)
+    server_socket.listen(MAX_CONNECTIONS)
 
     print(f"Сервер запущен на {HOST}:{PORT}")
 
