@@ -7,6 +7,7 @@ import hashlib
 
 HOST = '127.0.0.1'
 PORT = 4000
+BUFFER_SIZE = 4096
 
 def get_password_hash(password):
     hash_object = hashlib.sha256(password.encode('utf-8'))
@@ -40,7 +41,7 @@ def get_auth_data():
             s.send(json.dumps(
                 {"type": "AUTH", "login": login_e.get(), "password": hashed, "photo": photo_path.get()}).encode(
                 'utf-8'))
-            res = json.loads(s.recv(4096).decode('utf-8'))
+            res = json.loads(s.recv(BUFFER_SIZE).decode('utf-8'))
             if res["status"] == "success":
                 user_res["data"] = res["user"]
                 auth_win.destroy()
@@ -114,7 +115,7 @@ class TicTacToeClient:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((HOST, PORT))
             s.send(json.dumps(req).encode('utf-8'))
-            data = s.recv(4096).decode('utf-8')
+            data = s.recv(BUFFER_SIZE).decode('utf-8')
             parsed = json.loads(data)
             if "error" not in parsed:
                 self.state = parsed
