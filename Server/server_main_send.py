@@ -2,13 +2,7 @@ import socket
 import json
 import os
 import threading
-
-HOST = '127.0.0.1'
-PORT = 4000
-DB_FILE = "users.json"
-MAX_CONNECTIONS = 5
-BUFFER_SIZE = 4096
-
+import config
 
 class GameSession:
     # Класс одной игровую сессии
@@ -69,7 +63,7 @@ sessions_lock = threading.Lock()
 def handle_client(conn, addr):
     # Обрабатывает подключение от клиента
     try:
-        data = conn.recv(BUFFER_SIZE).decode('utf-8')
+        data = conn.recv(config.BUFFER_SIZE).decode('utf-8')
         if not data:
             return
 
@@ -121,15 +115,15 @@ def handle_client(conn, addr):
 def manage_db(login, password=None, photo=None, mode="auth"):
     # Функция паттерн "свидетель" для работы с данными  (JSON )
     data = {}
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
+    if os.path.exists(config.DB_FILE):
+        with open(config.DB_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
 
     if mode == "auth":
         if login not in data:
             # Регистрация нового
             data[login] = {"password": password, "photo": photo, "name": login}
-            with open(DB_FILE, "w", encoding="utf-8") as f:
+            with open(config.DB_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
             return {"status": "success", "user": data[login]}
         else:
@@ -145,10 +139,10 @@ def manage_db(login, password=None, photo=None, mode="auth"):
 if __name__ == "__main__":
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((HOST, PORT))
-    server_socket.listen(MAX_CONNECTIONS)
+    server_socket.bind((config.HOST, config.PORT))
+    server_socket.listen(config.MAX_CONNECTIONS)
 
-    print(f"Сервер запущен на {HOST}:{PORT}")
+    print(f"Сервер запущен на {config.HOST}:{config.PORT}")
 
     while True:
         try:

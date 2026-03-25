@@ -4,15 +4,11 @@ import socket
 import json
 from PIL import Image, ImageTk
 import hashlib
-
-HOST = '127.0.0.1'
-PORT = 4000
-BUFFER_SIZE = 4096
+import config
 
 def get_password_hash(password):
     hash_object = hashlib.sha256(password.encode('utf-8'))
     return hash_object.hexdigest()
-
 
 def get_auth_data():
     auth_win = tk.Tk()
@@ -36,12 +32,12 @@ def get_auth_data():
     def login():
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((HOST, PORT))
+            s.connect((config.HOST, config.PORT))
             hashed = get_password_hash(pass_e.get())
             s.send(json.dumps(
                 {"type": "AUTH", "login": login_e.get(), "password": hashed, "photo": photo_path.get()}).encode(
                 'utf-8'))
-            res = json.loads(s.recv(BUFFER_SIZE).decode('utf-8'))
+            res = json.loads(s.recv(4096).decode('utf-8'))
             if res["status"] == "success":
                 user_res["data"] = res["user"]
                 auth_win.destroy()
@@ -113,9 +109,9 @@ class TicTacToeClient:
             req['room_id'] = self.room_e.get()
             req['login'] = self.user['name']
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((HOST, PORT))
+            s.connect((config.HOST, config.PORT))
             s.send(json.dumps(req).encode('utf-8'))
-            data = s.recv(BUFFER_SIZE).decode('utf-8')
+            data = s.recv(4096).decode('utf-8')
             parsed = json.loads(data)
             if "error" not in parsed:
                 self.state = parsed
