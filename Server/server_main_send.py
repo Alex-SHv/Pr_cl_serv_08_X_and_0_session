@@ -4,9 +4,8 @@ import os
 import threading
 import config
 import hashlib
+from datetime import datetime
 
-
-# Функции ширования и дешифрования.
 def xor_cipher(data, key):
     hashed_key = hashlib.sha256(key).digest()
     key_len = len(hashed_key)
@@ -33,7 +32,6 @@ def decrypt_data(encrypted_bytes):
         print(f"Ошибка безопасности/декодирования: {e}")
         return {"status": "error", "message": "Ошибка шифрования"}
 
-# Сессия
 class GameSession:
     def __init__(self):
         self.board = [None] * 9
@@ -42,6 +40,8 @@ class GameSession:
         self.is_draw = False
         self.players = {}
         self.lock = threading.Lock()
+        self.moves_history = []
+        self.start_time = datetime.now()
 
     def check_winner(self):
         lines = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]
@@ -51,7 +51,6 @@ class GameSession:
         return None
 
     def make_move(self, index, player, login):
-        # Проверка: ходит ли тот, кто закрепился за ( х или 0)
         if self.players.get(player) != login:
             return
 
@@ -59,6 +58,7 @@ class GameSession:
             return
         if self.board[index] is None and self.current_player == player:
             self.board[index] = player
+            self.moves_history.append({"player": player, "login": login, "index": index, "time": datetime.now().strftime("%H:%M:%S")})
             winner = self.check_winner()
             if winner:
                 self.winner = winner
@@ -83,9 +83,9 @@ class GameSession:
         }
 
 
-# Массив сессий
 sessions = {}
 sessions_lock = threading.Lock()
+db_lock = threading.Lock()
 
 
 def handle_client(conn, addr):
@@ -118,6 +118,39 @@ def handle_client(conn, addr):
             conn.sendall(response)
             return
 
+        elif req_type == 'ADMIN_USER_STATS':
+            target_login = req.get('target')
+            with db_lock:
+                data = {}
+                if os.path.exists(config.DB_FILE):
+                    with open(config.DB_FILE, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+
+                if target_login in data:
+                    user_data = data[target_login]
+                    conn.sendall(encrypt_data({"status": "success", "user": user_data}))
+                else:
+                    conn.sendall(encrypt_data({"status": "error", "message": "Игрок не найден"}))
+            return
+
+        elif req_type == 'ADMIN_GAME_HISTORY':
+            room_id = str(req.get('room_id'))
+            with sessions_lock:
+                if room_id in sessions:
+                    session = sessions[room_id]
+                    history = {
+                        "players": session.players,
+                        "movesHistory": session.moves_history,
+                        "board": session.board,
+                        "winner": session.winner,
+                        "isDraw": session.is_draw,
+                        "startTime": session.start_time.isoformat()
+                    }
+                    conn.sendall(encrypt_data({"status": "success", "history": history}))
+                else:
+                    conn.sendall(encrypt_data({"status": "error", "message": "Игра не найдена"}))
+            return
+
         elif req_type == 'ADMIN_ACTION':
             action = req.get('action')
             target = req.get('target')
@@ -135,12 +168,11 @@ def handle_client(conn, addr):
                     elif action == 'unban':
                         data[target]['banned'] = False
 
-                    # Сохраняем изменения в файл
                     with open(config.DB_FILE, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=4)
-                    conn.send(encrypt_data({"status": "success"}))
+                    conn.sendall(encrypt_data({"status": "success"}))
                 else:
-                    conn.send(encrypt_data({"status": "error", "message": "Игрок не найден"}))
+                    conn.sendall(encrypt_data({"status": "error", "message": "Игрок не найден"}))
             return
 
         login = req.get('login', 'Guest')
@@ -150,18 +182,15 @@ def handle_client(conn, addr):
             conn.send(encrypt_data(result))
             return
 
-        # Логика получения состояния сессии
         room_id = str(req.get('room_id', '1'))
         role = req.get('player')
 
-        # Блокируем словарь сессий пока создаём новую
         with sessions_lock:
             if room_id not in sessions:
                 sessions[room_id] = GameSession()
                 print(f"Создана новая сессия: сессия  #{room_id}  Всего активных сессий: {len(sessions)}")
             curr = sessions[room_id]
 
-        # Блокируем только конкретную сессию
         with curr.lock:
             if role:
                 if role not in curr.players:
@@ -179,7 +208,6 @@ def handle_client(conn, addr):
             elif req.get('type') == 'GET_STATE':
                 pass
 
-                # Шифруем ответ
         encrypted_result = encrypt_data(curr.get_state())
         conn.send(encrypted_result)
     except Exception as e:
@@ -188,10 +216,7 @@ def handle_client(conn, addr):
         conn.close()
 
 
-db_lock = threading.Lock()
 
-
-# Функция-свидетель для работы с данными  (JSON )
 def manage_db(login, password=None, photo=None, mode="auth"):
     with db_lock:
         data = {}
@@ -209,15 +234,12 @@ def manage_db(login, password=None, photo=None, mode="auth"):
                 if data[login].get("banned"):
                     return {"status": "error", "message": "Аккаунт заблокирован администратором."}
 
-                # Проверка пароля
                 if data[login]["password"] == password:
                     return {"status": "success", "user": data[login]}
                 else:
                     return {"status": "error", "message": "Неверный пароль"}
 
 
-
-# Запуск сервера
 if __name__ == "__main__":
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -229,7 +251,6 @@ if __name__ == "__main__":
     while True:
         try:
             conn, addr = server_socket.accept()
-            # Каждый клиент обрабатывается в отдельном потоке
             thread = threading.Thread(target=handle_client, args=(conn, addr))
             thread.daemon = True
             thread.start()

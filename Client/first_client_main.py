@@ -107,7 +107,6 @@ class TicTacToeClient:
         self.root.title(f"Крестики-Нолики - {user['name']}")
         self.root.configure(bg='#1a1a1a')
 
-        # Левая панель
         self.side = tk.Frame(root, bg='#222', width=150)
         self.side.pack(side=tk.LEFT, fill=tk.Y, padx=5)
 
@@ -121,7 +120,6 @@ class TicTacToeClient:
 
         tk.Label(self.side, text=user['name'], fg='white', font=('Arial', 12, 'bold'), bg='#222').pack()
 
-        # Правая панель
         self.main = tk.Frame(root, bg='#1a1a1a')
         self.main.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
 
@@ -160,16 +158,14 @@ class TicTacToeClient:
         try:
             req['room_id'] = self.room_e.get()
             req['login'] = self.user['name']
-            req['player'] = self.my_role.get()  # Передаем роль во всех запросах
+            req['player'] = self.my_role.get()
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(2)
             s.connect((config.HOST, config.PORT))
 
-            # Шифруем
             s.send(encrypt_data(req))
 
-            # Дешифруем
             def recv_line(sock):
                 buf = b""
                 while True:
@@ -192,7 +188,6 @@ class TicTacToeClient:
             print(f"Ошибка связи: {e}")
 
     def move(self, i):
-        # Простая проверка на стороне клиента (основная на сервере)
         if self.state.get('winner') or self.state.get('isDraw'):
             return
         self.send({"type": "MOVE", "index": i})
@@ -202,7 +197,6 @@ class TicTacToeClient:
 
     def auto_update(self):
         self.send({"type": "GET_STATE"})
-        # Обновление раз в секунду
         self.root.after(1000, self.auto_update)
 
     def update_ui(self):

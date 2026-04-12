@@ -66,7 +66,7 @@ class AdminApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Tic-Tac-Toe Admin Panel")
-        self.root.geometry("700x700")
+        self.root.geometry("900x700")
 
         top_frame = tk.Frame(root)
         top_frame.pack(pady=10, fill=tk.X, padx=10)
@@ -83,16 +83,24 @@ class AdminApp:
         input_container = tk.Frame(action_frame)
         input_container.pack(side=tk.LEFT, padx=5)
 
-        tk.Label(input_container, text="Логин:", font=('Arial', 10)).pack(side=tk.LEFT, padx=1)
+        tk.Label(input_container, text="Логин:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=1)
         self.login_entry = tk.Entry(input_container, width=20)
         self.login_entry.pack(side=tk.LEFT, padx=5)
 
         buttons_container = tk.Frame(action_frame)
         buttons_container.pack(side=tk.LEFT, padx=1)
 
-        tk.Button(buttons_container, text="Бан", font=('Arial', 10),fg="white", bg="orange", command=lambda: self.user_action("ban"), width=10, height=2).pack(side=tk.LEFT, padx=3)
-        tk.Button(buttons_container, text="Разбан", font=('Arial', 10),fg="white", bg="green", command=lambda: self.user_action("unban"), width=10, height=2).pack(side=tk.LEFT, padx=3)
-        tk.Button(buttons_container, text="Удалить", font=('Arial', 10),fg="white", bg="red", command=lambda: self.user_action("delete"), width=10, height=2).pack(side=tk.LEFT, padx=3)
+        tk.Button(buttons_container, text="Бан", font=('Arial', 10, 'bold'),fg="white", bg="orange", command=lambda: self.user_action("ban"), width=10, height=2).pack(side=tk.LEFT, padx=3)
+        tk.Button(buttons_container, text="Разбан", font=('Arial', 10, 'bold'),fg="white", bg="green", command=lambda: self.user_action("unban"), width=10, height=2).pack(side=tk.LEFT, padx=3)
+        tk.Button(buttons_container, text="Удалить", font=('Arial', 10, 'bold'),fg="white", bg="red", command=lambda: self.user_action("delete"), width=10, height=2).pack(side=tk.LEFT, padx=3)
+
+        history_frame = tk.Frame(action_frame)
+        history_frame.pack(side=tk.LEFT, padx=20)
+
+        tk.Label(history_frame, text="ID Комнаты:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT)
+        self.room_entry = tk.Entry(history_frame, width=5)
+        self.room_entry.pack(side=tk.LEFT, padx=5)
+        tk.Button(history_frame, text="История ходов", command=self.load_game_history).pack(side=tk.LEFT)
 
     def log(self, text):
         self.display.delete('1.0', tk.END)
@@ -125,6 +133,27 @@ class AdminApp:
             self.log(out)
         else:
             messagebox.showerror("Ошибка", f"Сервер вернул: {res.get('message')}")
+
+    def load_game_history(self):
+        room_id = self.room_entry.get().strip()
+        if not room_id:
+            messagebox.showwarning("Внимание", "Введите ID комнаты")
+            return
+
+        res = send_admin_request({"type": "ADMIN_GAME_HISTORY", "room_id": room_id})
+        if res.get("status") == "success":
+            h = res.get("history", {})
+            out = f"ИСТОРИЯ ИГРЫ (Комната {room_id})\n"
+            out += f"Начало: {h.get('startTime')}\n"
+            out += f"Игроки: {h.get('players')}\n"
+            out += f"Результат: {h.get('winner') if h.get('winner') else ('Ничья' if h.get('isDraw') else 'В процессе')}\n"
+            out += "---------------------------\n"
+            out += "ХОДЫ:\n"
+            for i, move in enumerate(h.get('movesHistory', []), 1):
+                out += f"{i}. [{move['time']}] {move['login']} ({move['player']}) -> ячейка {move['index']}\n"
+            self.log(out)
+        else:
+            messagebox.showerror("Ошибка", res.get("message"))
 
     def load_users(self):
         res = send_admin_request({"type": "ADMIN_USERS"})
